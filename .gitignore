@@ -216,3 +216,5 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+fast_zero/__init__.py
+tests/__init__.py
