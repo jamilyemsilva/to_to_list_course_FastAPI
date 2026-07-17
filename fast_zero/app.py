@@ -1,30 +1,48 @@
 from http import HTTPStatus
 
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, HTTPException
 
-from fast_zero.schemas import Message
+from fast_zero.schemas import Message, UserDB, UserList, UserPublic, UserSchema
 
 app = FastAPI()
 
 
-@app.get('/', status_code=HTTPStatus.OK, response_model=Message)
-def read_root():
-    return {'message': 'Olá Mundo!'}
+database = []
 
 
-@app.get('/exercicio_html', status_code=HTTPStatus.OK, response_class=HTMLResponse)
-def exercicio_html():
-    return """
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Olá mundo em python usando html</title>
-            </head>
-            <body>
-              <p>'Olá Mundo'</p> 
-            </body>
-            </html>            
-          """
+@app.post('/users/', status_code=HTTPStatus.CREATED, response_model=UserPublic)
+def create_user(user: UserSchema):
+    user_with_id = UserDB(**user.model_dump(), id=len(database) + 1)
+
+    database.append(user_with_id)
+    return user_with_id
+
+
+@app.get('/users/', status_code=HTTPStatus.OK, response_model=UserList)
+def read_users():
+    return {'users': database}
+
+
+@app.put('/users/{user_id}', response_model=UserPublic)
+def update_user(user_id: int, user: UserSchema):
+    if user_id > len(database) or user_id < 1:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND, detail='User nao encontrado bro'
+        )
+
+    user_with_id = UserDB(**user.model_dump(), id=user_id)
+    database[user_id - 1] = user_with_id
+
+    return user_with_id
+
+
+@app.delete('/users/{user_id}/', response_model=Message)
+def delete_user(user_id: int):
+    if user_id > len(database) or user_id < 1:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND, detail='fanstama? medo'
+        )
+
+    del database[user_id - 1]
+
+    return {'message': 'User deleted'}
