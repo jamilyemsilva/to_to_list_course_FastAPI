@@ -1,6 +1,7 @@
 from http import HTTPStatus
 
 from fast_zero.schemas import UserPublic
+from fast_zero.security import create_access_token
 
 # def test_root_deve_retornar_ok_e_ola_mundo():
 #     client = TestClient(app)
@@ -63,16 +64,76 @@ def test_create_user_should_return_409_email_exists(client, user):
     assert response.json() == {'detail': 'Email already exists'}
 
 
-def test_read_users(client):
-    response = client.get('/users/')
-    assert response.status_code == HTTPStatus.OK
-    assert response.json() == {'users': []}
-
-
-def test_read_users_with_users(client, user):
+def test_read_users(client, user, token):
     user_schema = UserPublic.model_validate(user).model_dump()
-    response = client.get('/users/')
+    response = client.get(
+        '/users/', headers={'Authorization': f'Bearer {token}'}
+    )
     assert response.json() == {'users': [user_schema]}
+
+
+def test_update_user(client, user, token):
+    response = client.put(
+        '/users/1',
+        headers={'Authorization': f'Bearer {token}'},
+        json={
+            'username': 'jamily_updated',
+            'email': 'jamily_updated@gmail.com',
+            'password': '1234567',
+        },
+    )
+    assert response.status_code == HTTPStatus.OK
+    assert response.json() == {
+        'id': 1,
+        'username': 'jamily_updated',
+        'email': 'jamily_updated@gmail.com',
+    }
+
+
+def test_update_integrity_error(client, user, token):
+    # Criando um registro para "fausto"
+    client.post(
+        '/users',
+        json={
+            'username': 'fausto',
+            'email': 'fausto@example.com',
+            'password': 'secret',
+        },
+    )
+
+    response_update = client.put(
+        f'/users/{user.id}',
+        headers={'Authorization': f'Bearer {token}'},
+        json={
+            'username': 'fausto',
+            'email': 'bob@example.com',
+            'password': 'mynewpassword',
+        },
+    )
+    assert response_update.status_code == HTTPStatus.CONFLICT
+    assert response_update.json() == {
+        'detail': 'Username or Email already exists'
+    }
+
+
+def test_delete_user(client, user, token):
+    response = client.delete(
+        f'/users/{user.id}/', headers={'Authorization': f'Bearer {token}'}
+    )
+    assert response.status_code == HTTPStatus.OK
+    assert response.json() == {'message': 'user deleted'}
+
+
+def test_get_token(client, user):
+
+    response = client.post(
+        'token', data={'username': user.email, 'password': user.clean_password}
+    )
+    token = response.json()
+
+    assert response.status_code == HTTPStatus.OK
+    assert token['token_type'] == 'Bearer'
+    assert 'access_token' in token
 
 
 def test_get_user_should_return_not_found__exercicio(client):
@@ -92,50 +153,27 @@ def test_get_user___exercicio(client, user):
         'id': user.id,
     }
 
+def test_get_current_user_not_found__exercicio(client):
+    data = {'no-email': 'test'}
+    token = create_access_token(data)
 
-def test_update_user(client, user):
-    response = client.put(
+    response = client.delete(
         '/users/1',
-        json={
-            'username': 'jamily_updated',
-            'email': 'jamily_updated@gmail.com',
-            'password': '1234567',
-        },
-    )
-    assert response.status_code == HTTPStatus.OK
-    assert response.json() == {
-        'id': 1,
-        'username': 'jamily_updated',
-        'email': 'jamily_updated@gmail.com',
-    }
-
-
-def test_update_integrity_error(client, user):
-    # Criando um registro para "fausto"
-    client.post(
-        '/users',
-        json={
-            'username': 'fausto',
-            'email': 'fausto@example.com',
-            'password': 'secret',
-        },
+        headers={'Authorization': f'Bearer {token}'},
     )
 
-    response_update = client.put(
-        f'/users/{user.id}',
-        json={
-            'username': 'fausto',
-            'email': 'bob@example.com',
-            'password': 'mynewpassword',
-        },
+    assert response.status_code == HTTPStatus.UNAUTHORIZED
+    assert response.json() == {'detail': 'Could not validate credentials'}
+
+
+def test_get_current_user_does_not_exists__exercicio(client):
+    data = {'sub': 'test@test'}
+    token = create_access_token(data)
+
+    response = client.delete(
+        '/users/1',
+        headers={'Authorization': f'Bearer {token}'},
     )
-    assert response_update.status_code == HTTPStatus.CONFLICT
-    assert response_update.json() == {
-        'detail': 'Username or Email already exists'
-    }
 
-
-def test_delete_user(client, user):
-    response = client.delete('/users/1/')
-    assert response.status_code == HTTPStatus.OK
-    assert response.json() == {'message': 'user deleted'}
+    assert response.status_code == HTTPStatus.UNAUTHORIZED
+    assert response.json() == {'detail': 'Could not validate credentials'}
